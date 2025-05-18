@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Traffic Dodge Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        #gameArea {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            height: 600px;
+            margin: auto;
+            background: linear-gradient(to bottom, #1a1a1a, #333);
+            overflow: hidden;
+            border: 4px solid #444;
+            border-radius: 8px;
+            touch-action: none;
+        }
+        
+        #playerCar {
+            position: absolute;
+            width: 50px;
+            height: 100px;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            z-index: 10;
+            transition: left 0.2s ease;
+            filter: drop-shadow(0 0 5px rgba(0, 200, 0, 0.7));
+        }
+        
+        .traffic-car {
+            position: absolute;
+            width: 50px;
+            height: 100px;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            z-index: 5;
+            filter: drop-shadow(0 0 5px rgba(200, 0, 0, 0.5));
+        }
+        
+        .road-line {
+            position: absolute;
+            width: 8px;
+            height: 80px;
+            background: linear-gradient(to bottom, transparent 10%, #fff 10%, #fff 90%, transparent 90%);
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1;
+        }
+        
+        .road-side {
+            position: absolute;
+            width: 30%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                90deg,
+                #555,
+                #555 10px,
+                #444 10px,
+                #444 20px
+            );
+            z-index: 2;
+        }
+        
+        #leftSide {
+            left: 0;
+        }
+        
+        #rightSide {
+            right: 0;
+        }
+        
+        #controls {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+            gap: 40px;
+        }
+        
+        .control-btn {
+            width: 80px;
+            height: 80px;
+            background-color: rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 30px;
+            color: white;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+            backdrop-filter: blur(2px);
+        }
+        
+        @media (hover: hover) {
+            #controls {
+                display: none;
+            }
+        }
+        
+        .explosion {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            background-image: url('https://i.postimg.cc/8CFg0vVn/explosion.gif');
+            background-size: contain;
+            z-index: 20;
+            pointer-events: none;
+        }
+        
+        .speed-effect {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, transparent 0%, rgba(0,0,0,0.2) 100%);
+            z-index: 3;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 flex flex-col items-center justify-center min-h-screen p-4">
+    <h1 class="text-3xl font-bold text-white mb-4">Traffic Dodge</h1>
+    <div class="bg-gray-800 p-6 rounded-lg shadow-lg w-full max-w-md">
+        <div class="flex justify-between items-center mb-2">
+            <div class="text-white">
+                High Score: <span id="highScore">0</span>
+            </div>
+            <div class="text-white">
+                Score: <span id="score">0</span>
+            </div>
+        </div>
+        <div id="gameArea">
+            <div id="leftSide" class="road-side"></div>
+            <div id="rightSide" class="road-side"></div>
+            <div id="speedEffect" class="speed-effect"></div>
+            <!-- Game elements will be added here dynamically -->
+        </div>
+        
+        <div class="mt-4 flex justify-between items-center">
+            <button id="soundBtn" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">
+                Sound: ON
+            </button>
+            <button id="startBtn" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded">
+                Start Game
+            </button>
+        </div>
+        
+        <!-- Mobile controls (only visible on touch devices) -->
+        <div id="controls" class="hidden">
+            <div id="leftBtn" class="control-btn">←</div>
+            <div id="rightBtn" class="control-btn">→</div>
+        </div>
+    </div>
+    <div id="gameOver" class="hidden mt-4 text-center">
+        <div class="text-red-500 text-2xl font-bold mb-2">CRASHED!</div>
+        <div class="text-white text-xl">Score: <span id="finalScore">0</span></div>
+        <div class="text-yellow-300 text-lg mt-2">High Score: <span id="finalHighScore">0</span></div>
+        <button id="restartBtn" class="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded mt-4">
+            Play Again
+        </button>
+    </div>
+
+    <!-- Audio elements -->
+    <audio id="engineSound" loop>
+        <source src="https://assets.mixkit.co/sfx/preview/mixkit-car-engine-idling-1560.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="crashSound">
+        <source src="https://assets.mixkit.co/sfx/preview/mixkit-car-crash-with-explosion-1567.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="scoreSound">
+        <source src="https://assets.mixkit.co/sfx/preview/mixkit-achievement-bell-600.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="highScoreSound">
+        <source src="https://assets.mixkit.co/sfx/preview/mixkit-unlock-game-notification-253.mp3" type="audio/mpeg">
+    </audio>
+
+    <script>
+        // Game configuration
+        const config = {
+            carImages: {
+                player: 'https://i.postimg.cc/2VwVMQs6/green-car.png',
+                traffic: [
+                    'https://i.postimg.cc/4HRYkB4K/black-car.png',
+                    'https://i.postimg.cc/LgknHLhx/blue-Car.png',
+                    'https://i.postimg.cc/qg2tXVQ2/gray-car.png',
+                    'https://i.postimg.cc/LnRJxC0w/Red.png',
+                    'https://i.postimg.cc/w1j7ptzk/white-car.png',
+                    'https://i.postimg.cc/qNDgMkMH/yellow-car.png'
+                ]
+            },
+            lanes: [0.25, 0.5, 0.75], // Lane positions (25%, center, 75%)
+            initialSpeed: 2,
+            speedIncrease: 0.2,
+            scoreIncrement: 1,
+            trafficFrequency: 2000 // ms between cars
+        };
+
+        // Game state
+        const state = {
+            gameArea: null,
+            playerCar: null,
+            gameInterval: null,
+            trafficInterval: null,
+            roadLinesInterval: null,
+            score: 0,
+            highScore: localStorage.getItem('trafficHighScore') || 0,
+            gameSpeed: config.initialSpeed,
+            trafficSpeed: config.initialSpeed,
+            isGameRunning: false,
+            isSoundOn: true,
+            trafficCars: [],
+            roadLines: [],
+            isTouchDevice: false,
+            touchStartX: 0
+        };
+
+        // DOM elements
+        const elements = {
+            gameArea: document.getElementById('gameArea'),
+            score: document.getElementById('score'),
+            highScore: document.getElementById('highScore'),
+            finalScore: document.getElementById('finalScore'),
+            finalHighScore: document.getElementById('finalHighScore'),
+            gameOver: document.getElementById('gameOver'),
+            startBtn: document.getElementById('startBtn'),
+            restartBtn: document.getElementById('restartBtn'),
+            soundBtn: document.getElementById('soundBtn'),
+            controls: document.getElementById('controls'),
+            leftBtn: document.getElementById('leftBtn'),
+            rightBtn: document.getElementById('rightBtn'),
+            engineSound: document.getElementById('engineSound'),
+            crashSound: document.getElementById('crashSound'),
+            scoreSound: document.getElementById('scoreSound'),
+            highScoreSound: document.getElementById('highScoreSound'),
+            speedEffect: document.getElementById('speedEffect'),
+            leftSide: document.getElementById('leftSide'),
+            rightSide: document.getElementById('rightSide')
+        };
+
+        // Initialize the game
+        function initGame() {
+            checkTouchDevice();
+            loadHighScore();
+            createPlayerCar();
+            createRoadLines();
+            setupEventListeners();
+            updateUI();
+        }
+
+        function checkTouchDevice() {
+            state.isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+            if (state.isTouchDevice) {
+                elements.controls.classList.remove('hidden');
+            }
+        }
+
+        function loadHighScore() {
+            elements.highScore.textContent = state.highScore;
+        }
+
+        function createPlayerCar() {
+            state.playerCar = document.createElement('div');
+            state.playerCar.id = 'playerCar';
+            state.playerCar.style.backgroundImage = `url(${config.carImages.player})`;
+            resetPlayerPosition();
+            elements.gameArea.appendChild(state.playerCar);
+        }
+
+        function resetPlayerPosition() {
+            const centerLane = config.lanes[1];
+            state.playerCar.style.left = `${elements.gameArea.offsetWidth * centerLane - 25}px`;
+            state.playerCar.style.bottom = '50px';
+        }
+
+        function createRoadLines() {
+            // Clear existing lines
+            state.roadLines.forEach(line => elements.gameArea.removeChild(line));
+            state.roadLines = [];
+            
+            // Create new lines
+            for (let i = 0; i < 10; i++) {
+                const line = document.createElement('div');
+                line.className = 'road-line';
+                line.style.top = `${i * 120 - 60}px`;
+                elements.gameArea.appendChild(line);
+                state.roadLines.push(line);
+            }
+        }
+
+        function moveRoadLines() {
+            state.roadLines.forEach(line => {
+                const top = parseInt(line.style.top) + state.gameSpeed * 2;
+                line.style.top = `${top > elements.gameArea.offsetHeight ? -60 : top}px`;
+            });
+        }
+
+        function createTrafficCar() {
+            if (!state.isGameRunning) return;
+            
+            const trafficCar = document.createElement('div');
+            trafficCar.className = 'traffic-car';
+            
+            // Random car image
+            const randomCarIndex = Math.floor(Math.random() * config.carImages.traffic.length);
+            trafficCar.style.backgroundImage = `url(${config.carImages.traffic[randomCarIndex]})`;
+            
+            // Random lane
+            const laneIndex = Math.floor(Math.random() * config.lanes.length);
+            const lanePosition = config.lanes[laneIndex];
+            trafficCar.style.left = `${elements.gameArea.offsetWidth * lanePosition - 25}px`;
+            trafficCar.style.top = '-100px';
+            
+            elements.gameArea.appendChild(trafficCar);
+            state.trafficCars.push({
+                element: trafficCar,
+                lane: laneIndex,
+                speed: state.trafficSpeed + Math.random() * 2
+            });
+        }
+
+        function moveTrafficCars() {
+            state.trafficCars.forEach((car, index) => {
+                const top = parseInt(car.element.style.top) + car.speed;
+                car.element.style.top = `${top}px`;
+                
+                if (top > elements.gameArea.offsetHeight) {
+                    elements.gameArea.removeChild(car.element);
+                    state.trafficCars.splice(index, 1);
+                    increaseScore();
+                }
+            });
+        }
+
+        function checkCollision() {
+            const playerRect = state.playerCar.getBoundingClientRect();
+            
+            for (let i = 0; i < state.trafficCars.length; i++) {
+                const trafficRect = state.trafficCars[i].element.getBoundingClientRect();
+                
+                if (rectsOverlap(playerRect, trafficRect)) {
+                    handleCollision();
+                    return;
+                }
+            }
+        }
+
+        function rectsOverlap(rect1, rect2) {
+            return !(
+                rect1.right < rect2.left || 
+                rect1.left > rect2.right || 
+                rect1.bottom < rect2.top || 
+                rect1.top > rect2.bottom
+            );
+        }
+
+        function handleCollision() {
+            // Show explosion effect
+            const explosion = document.createElement('div');
+            explosion.className = 'explosion';
+            explosion.style.left = `${parseInt(state.playerCar.style.left) - 15}px`;
+            explosion.style.top = `${parseInt(state.playerCar.style.bottom)}px`;
+            elements.gameArea.appendChild(explosion);
+            
+            // Remove explosion after animation
+            setTimeout(() => {
+                elements.gameArea.removeChild(explosion);
+            }, 1000);
+            
+            // Play crash sound
+            if (state.isSoundOn) {
+                elements.crashSound.currentTime = 0;
+                elements.crashSound.play();
+            }
+            
+            gameOver();
+        }
+
+        function increaseScore() {
+            state.score += config.scoreIncrement;
+            elements.score.textContent = state.score;
+            
+            // Play score sound
+            if (state.score % 5 === 0 && state.isSoundOn) {
+                elements.scoreSound.currentTime = 0;
+                elements.scoreSound.play();
+            }
+            
+            // Increase difficulty
+            if (state.score % 10 === 0) {
+                state.gameSpeed += config.speedIncrease;
+                state.trafficSpeed += config.speedIncrease;
+                updateSpeedEffect();
+            }
+            
+            // Update high score
+            if (state.score > state.highScore) {
+                state.highScore = state.score;
+                localStorage.setItem('trafficHighScore', state.highScore);
+                elements.highScore.textContent = state.highScore;
+                
+                // Play high score sound
+                if (state.isSoundOn) {
+                    elements.highScoreSound.currentTime = 0;
+                    elements.highScoreSound.play();
+                }
+            }
+        }
+
+        function updateSpeedEffect() {
+            // Show speed effect based on current speed
+            const speedRatio = (state.gameSpeed - config.initialSpeed) / 3;
+            elements.speedEffect.style.opacity = Math.min(speedRatio, 0.5);
+        }
+
+        function startGame() {
+            if (state.isGameRunning) return;
+            
+            // Reset game state
+            state.isGameRunning = true;
+            state.score = 0;
+            state.gameSpeed = config.initialSpeed;
+            state.trafficSpeed = config.initialSpeed;
+            elements.score.textContent = '0';
+            elements.gameOver.classList.add('hidden');
+            elements.speedEffect.style.opacity = '0';
+            
+            // Clear existing traffic cars
+            state.trafficCars.forEach(car => elements.gameArea.removeChild(car.element));
+            state.trafficCars = [];
+            
+            // Reset player position
+            resetPlayerPosition();
+            
+            // Start game loops
+            state.gameInterval = setInterval(updateGame, 16);
+            state.trafficInterval = setInterval(createTrafficCar, config.trafficFrequency);
+            state.roadLinesInterval = setInterval(moveRoadLines, 16);
+            
+            // Play engine sound
+            if (state.isSoundOn) {
+                elements.engineSound.currentTime = 0;
+                elements.engineSound.play();
+            }
+        }
+
+        function updateGame() {
+            moveTrafficCars();
+            checkCollision();
+        }
+
+        function gameOver() {
+            state.isGameRunning = false;
+            clearInterval(state.gameInterval);
+            clearInterval(state.trafficInterval);
+            clearInterval(state.roadLinesInterval);
+            
+            // Stop engine sound
+            elements.engineSound.pause();
+            
+            // Update UI
+            elements.finalScore.textContent = state.score;
+            elements.finalHighScore.textContent = state.highScore;
+            elements.gameOver.classList.remove('hidden');
+            elements.startBtn.textContent = 'Play Again';
+        }
+
+        function movePlayer(direction) {
+            if (!state.isGameRunning) return;
+            
+            const currentLeft = parseInt(state.playerCar.style.left);
+            const moveAmount = elements.gameArea.offsetWidth * 0.25;
+            let newPosition;
+            
+            if (direction === 'left') {
+                newPosition = Math.max(
+                    elements.gameArea.offsetWidth * config.lanes[0] - 25, 
+                    currentLeft - moveAmount
+                );
+            } else {
+                newPosition = Math.min(
+                    elements.gameArea.offsetWidth * config.lanes[2] - 25, 
+                    currentLeft + moveAmount
+                );
+            }
+            
+            state.playerCar.style.left = `${newPosition}px`;
+        }
+
+        function toggleSound() {
+            state.isSoundOn = !state.isSoundOn;
+            elements.soundBtn.textContent = `Sound: ${state.isSoundOn ? 'ON' : 'OFF'}`;
+            
+            if (!state.isSoundOn) {
+                elements.engineSound.pause();
+            } else if (state.isGameRunning) {
+                elements.engineSound.play();
+            }
+        }
+
+        function setupEventListeners() {
+            // Button controls
+            elements.startBtn.addEventListener('click', startGame);
+            elements.restartBtn.addEventListener('click', startGame);
+            elements.soundBtn.addEventListener('click', toggleSound);
+            
+            // Keyboard controls
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowLeft') movePlayer('left');
+                else if (e.key === 'ArrowRight') movePlayer('right');
+            });
+            
+            // Touch controls
+            if (state.isTouchDevice) {
+                elements.leftBtn.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    movePlayer('left');
+                });
+                
+                elements.rightBtn.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    movePlayer('right');
+                });
+                
+                // Swipe controls
+                elements.gameArea.addEventListener('touchstart', (e) => {
+                    state.touchStartX = e.touches[0].clientX;
+                });
+                
+                elements.gameArea.addEventListener('touchmove', (e) => {
+                    if (!state.touchStartX) return;
+                    
+                    const touchEndX = e.touches[0].clientX;
+                    const diffX = state.touchStartX - touchEndX;
+                    
+                    if (Math.abs(diffX) > 10) {
+                        diffX > 0 ? movePlayer('left') : movePlayer('right');
+                        state.touchStartX = null;
+                    }
+                    
+                    e.preventDefault();
+                });
+            }
+        }
+
+        function updateUI() {
+            elements.highScore.textContent = state.highScore;
+            elements.soundBtn.textContent = `Sound: ${state.isSoundOn ? 'ON' : 'OFF'}`;
+        }
+
+        // Initialize the game when the page loads
+        window.onload = initGame;
+    </script>
+</body>
+</html>
